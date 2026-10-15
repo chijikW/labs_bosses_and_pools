@@ -1,7 +1,44 @@
 #include "torus_renderer.hpp"
-
+#include "graphics_internal.hpp"
 #include <cstring>
 #include <iostream>
+#include <fstream>
+
+namespace {
+
+    std::vector<char> readFile(const std::string& filename) {
+        std::ifstream file(filename, std::ios::ate | std::ios::binary);
+        if (!file.is_open()) {
+            std::cerr << "Failed to open file: " << filename << '\n';
+            return {};
+        }
+
+        const size_t file_size = static_cast<size_t>(file.tellg());
+        std::vector<char> buffer(file_size);
+
+        file.seekg(0);
+        file.read(buffer.data(), static_cast<std::streamsize>(file_size));
+        file.close();
+
+        return buffer;
+    }
+
+    VkShaderModule createShaderModule(VkDevice device, const std::vector<char>& code) {
+        const VkShaderModuleCreateInfo info = {
+            .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+            .codeSize = code.size(),
+            .pCode = reinterpret_cast<const uint32_t*>(code.data()),
+        };
+
+        VkShaderModule module = VK_NULL_HANDLE;
+        if (vkCreateShaderModule(device, &info, nullptr, &module) != VK_SUCCESS) {
+            std::cerr << "Failed to create shader module\n";
+            return VK_NULL_HANDLE;
+        }
+        return module;
+    }
+
+} // namespace
 
 namespace torus {
 
@@ -153,6 +190,169 @@ namespace torus {
         }
         std::memcpy(uniform_mapped_, &ubo, sizeof(ubo));
     }
+
+    bool Renderer::createPipelineLayout() {
+        // Push constants для tint из ImGui
+        const VkPushConstantRange push_range = {
+            .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+            .offset = 0,
+            .size = sizeof(float) * 4, // vec4
+        };
+
+        const VkPipelineLayoutCreateInfo layout_info = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+            .setLayoutCount = 1,
+            .pSetLayouts = &descriptor_set_layout_,
+            .pushConstantRangeCount = 1,
+            .pPushConstantRanges = &push_range,
+        };
+
+        if (vkCreatePipelineLayout(device_, &layout_info, nullptr,
+            &pipeline_layout_) != VK_SUCCESS) {
+            std::cerr << "Failed to create pipeline layout\n";
+            return false;
+        }
+        return true;
+    }
+
+    bool Renderer::createPipeline() {
+        const auto vert_code = readFile("shaders/torus.vert.spv");
+        const auto frag_code = readFile("shaders/torus.frag.spv");
+
+        if (vert_code.empty() || frag_code.empty()) {
+            std::cerr << "Failed to read shader SPIR-V files. "
+                "Did you compile shaders? (check shaders/ folder)\n";
+            return false;
+        }
+
+        VkShaderModule vert_module = createShaderModule(device_, vert_code);
+        VkShaderModule frag_module = createShaderModule(device_, frag_code);
+        if (vert_module == VK_NULL_HANDLE || frag_module == VK_NULL_HANDLE) {
+            return false;
+        }
+
+        const VkPipelineShaderStageCreateInfo stages[] = {
+            {
+                .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                .stage = VK_SHADER_STAGE_VERTEX_BIT,
+                .module = vert_module,
+                .pName = "main",
+            },
+            {
+                .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
+                .module = frag_module,
+                .pName = "main",
+            },
+        };
+
+        // Описание формата вершин: position (vec3) + color (vec3)
+        const VkVertexInputBindingDescription binding = {
+            .binding = 0,
+            .stride = sizeof(Vertex),
+            .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
+        };
+
+        const VkVertexInputAttributeDescription attributes[] = {
+            {.location = 0, .binding = 0, .format = VK_FORMAT_R32G32B32_SFLOAT,
+              .offset = offsetof(Vertex, position) },
+            {.location = 1, .binding = 0, .format = VK_FORMAT_R32G32B32_SFLOAT,
+              .offset = offsetof(Vertex, color) },
+        };
+
+        const VkPipelineVertexInputStateCreateInfo vertex_input = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+            .vertexBindingDescriptionCount = 1,
+            .pVertexBindingDescriptions = &binding,
+            .vertexAttributeDescriptionCount = 2,
+            .pVertexAttributeDescriptions = attributes,
+        };
+
+        const VkPipelineInputAssemblyStateCreateInfo input_assembly = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+            .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+        };
+
+        const VkPipelineViewportStateCreateInfo viewport_state = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+            .viewportCount = 1,
+            .scissorCount = 1,
+        };
+
+        const VkPipelineRasterizationStateCreateInfo rasterizer = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+            .polygonMode = VK_POLYGON_MODE_FILL,
+            .cullMode = VK_CULL_MODE_BACK_BIT,
+            .frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE,
+            .lineWidth = 1.0f,
+        };
+
+        const VkPipelineMultisampleStateCreateInfo multisampling = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+            .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
+        };
+
+        const VkPipelineDepthStencilStateCreateInfo depth_stencil = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+            .depthTestEnable = VK_TRUE,
+            .depthWriteEnable = VK_TRUE,
+            .depthCompareOp = VK_COMPARE_OP_LESS,
+        };
+
+        const VkPipelineColorBlendAttachmentState color_blend_attachment = {
+            .blendEnable = VK_FALSE,
+            .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+                              VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT,
+        };
+
+        const VkPipelineColorBlendStateCreateInfo color_blending = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+            .attachmentCount = 1,
+            .pAttachments = &color_blend_attachment,
+        };
+
+        const VkDynamicState dynamic_states[] = {
+            VK_DYNAMIC_STATE_VIEWPORT,
+            VK_DYNAMIC_STATE_SCISSOR,
+        };
+
+        const VkPipelineDynamicStateCreateInfo dynamic_state = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+            .dynamicStateCount = 2,
+            .pDynamicStates = dynamic_states,
+        };
+
+        const VkGraphicsPipelineCreateInfo pipeline_info = {
+            .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+            .stageCount = 2,
+            .pStages = stages,
+            .pVertexInputState = &vertex_input,
+            .pInputAssemblyState = &input_assembly,
+            .pViewportState = &viewport_state,
+            .pRasterizationState = &rasterizer,
+            .pMultisampleState = &multisampling,
+            .pDepthStencilState = &depth_stencil,
+            .pColorBlendState = &color_blending,
+            .pDynamicState = &dynamic_state,
+            .layout = pipeline_layout_,
+            .renderPass = graphics::internal::context.render_pass,
+            .subpass = 0,
+        };
+
+        // context из graphics::internal
+        const VkResult result = vkCreateGraphicsPipelines(
+            device_, VK_NULL_HANDLE, 1, &pipeline_info, nullptr, &pipeline_);
+
+        vkDestroyShaderModule(device_, frag_module, nullptr);
+        vkDestroyShaderModule(device_, vert_module, nullptr);
+
+        if (result != VK_SUCCESS) {
+            std::cerr << "Failed to create graphics pipeline\n";
+            return false;
+        }
+        return true;
+    }
+
     bool Renderer::initialize(VmaAllocator allocator, VkDevice device) {
         allocator_ = allocator;
         device_ = device;
@@ -219,6 +419,14 @@ namespace torus {
             shutdown();
             return false;
         }
+        if (!createPipelineLayout()) {
+            shutdown();
+            return false;
+        }
+        if (!createPipeline()) {
+            shutdown();
+            return false;
+        }
         std::cout << "Torus renderer initialized: "
             << mesh.vertices.size() << " vertices, "
             << mesh.indices.size() << " indices\n";
@@ -230,7 +438,14 @@ namespace torus {
         if (allocator_ == VK_NULL_HANDLE) {
             return;
         }
-
+        if (pipeline_ != VK_NULL_HANDLE) {
+            vkDestroyPipeline(device_, pipeline_, nullptr);
+            pipeline_ = VK_NULL_HANDLE;
+        }
+        if (pipeline_layout_ != VK_NULL_HANDLE) {
+            vkDestroyPipelineLayout(device_, pipeline_layout_, nullptr);
+            pipeline_layout_ = VK_NULL_HANDLE;
+        }
         if (descriptor_pool_ != VK_NULL_HANDLE) {
             vkDestroyDescriptorPool(device_, descriptor_pool_, nullptr);
             descriptor_pool_ = VK_NULL_HANDLE;

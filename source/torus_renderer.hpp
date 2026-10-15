@@ -28,13 +28,18 @@ namespace torus {
         bool initialize(VmaAllocator allocator, VkDevice device);
         void shutdown();
 
-        // Обновить матрицы в uniform buffer.
+        // Обнова матриц в uniform buffer.
         // Вызывается каждый кадр из application::update().
         void updateUniforms(const UniformBufferObject& ubo);
 
         VkBuffer       vertexBuffer()       const { return vertex_buffer_; }
         VkBuffer       indexBuffer()        const { return index_buffer_; }
         uint32_t       indexCount()         const { return index_count_; }
+        VkDescriptorSetLayout descriptorSetLayout() const { return descriptor_set_layout_; }
+        VkDescriptorSet       descriptorSet()       const { return descriptor_set_; }
+        // Геттеры для шага 4 (pipeline и отрисовка)
+        VkPipeline            pipeline()            const { return pipeline_; }
+        VkPipelineLayout      pipelineLayout()      const { return pipeline_layout_; }
         VkDescriptorSetLayout descriptorSetLayout() const { return descriptor_set_layout_; }
         VkDescriptorSet       descriptorSet()       const { return descriptor_set_; }
 
@@ -45,6 +50,11 @@ namespace torus {
         bool createUniformBuffer();
         bool createDescriptorSetLayout();
         bool createDescriptorPoolAndSet();
+        bool createPipelineLayout();
+        bool createPipeline();
+
+        VkPipeline       pipeline_ = VK_NULL_HANDLE;
+        VkPipelineLayout pipeline_layout_ = VK_NULL_HANDLE;
 
         VmaAllocator allocator_ = VK_NULL_HANDLE;
         VkDevice     device_ = VK_NULL_HANDLE;
