@@ -1,6 +1,7 @@
-#include "application.hpp"
+п»ї#include "application.hpp"
 
 #include <imgui.h>
+#define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <glm/gtc/matrix_transform.hpp>
 
 #include <cmath>
@@ -29,7 +30,7 @@ namespace application {
     }
 
     void update(double time) {
-        // time дельта между кадрами (сек)
+        // time РґРµР»СЊС‚Р° РјРµР¶РґСѓ РєР°РґСЂР°РјРё (СЃРµРє)
         const float delta = static_cast<float>(time);
 
         if (state.playing) {
@@ -42,7 +43,7 @@ namespace application {
             state.rotation.y = angle;
         }
 
-        // расчёт MVP
+        // СЂР°СЃС‡С‘С‚ MVP
         glm::mat4 model = glm::mat4(1.0f);
         model = glm::translate(model, state.position);
         model = glm::rotate(model, state.rotation.x, glm::vec3(1.0f, 0.0f, 0.0f));
@@ -69,12 +70,17 @@ namespace application {
             proj = glm::ortho(-w, w, -h, h, 0.1f, 100.0f);
         }
 
-        // Vulkan: ось Y смотрит вниз, компенсируем для glm
+        // Vulkan: РѕСЃСЊ Y СЃРјРѕС‚СЂРёС‚ РІРЅРёР· вЂ” РёРЅРІРµСЂС‚РёСЂСѓРµРј Y
         proj[1][1] *= -1.0f;
+
+        // Vulkan: z РІ NDC в€€ [0, 1], Р° glm (OpenGL) РґР°С‘С‚ z в€€ [-1, 1]
+        // РїСЂРµРѕР±СЂР°Р·РѕРІР°РЅРёРµ: z_vk = 0.5 * z_gl + 0.5
+        proj[2][2] *= 0.5f;
+        proj[3][2] = proj[3][2] * 0.5f + 0.5f;
 
         state.renderer.updateUniforms({ model, view, proj });
 
-        // ImGui окно управления
+        // ImGui РѕРєРЅРѕ СѓРїСЂР°РІР»РµРЅРёСЏ
         ImGui::Begin("Torus controls");
 
         ImGui::Checkbox("Perspective", &state.usePerspective);
@@ -105,7 +111,7 @@ namespace application {
 
         const VkCommandBuffer cmd = fd.command_buffer;
 
-        //начало render pass
+        //РЅР°С‡Р°Р»Рѕ render pass
         VkClearValue color_clear{};
         color_clear.color = { { 0.05f, 0.05f, 0.08f, 1.0f } };
         VkClearValue depth_clear{};
@@ -124,7 +130,7 @@ namespace application {
 
         vkCmdBeginRenderPass(cmd, &render_pass_begin, VK_SUBPASS_CONTENTS_INLINE);
 
-        // динамический viewport/scissor
+        // РґРёРЅР°РјРёС‡РµСЃРєРёР№ viewport/scissor
         const VkViewport viewport = {
             .x = 0.0f,
             .y = 0.0f,
@@ -141,7 +147,7 @@ namespace application {
         };
         vkCmdSetScissor(cmd, 0, 1, &scissor);
 
-        // привязка pipeline и ресурсов
+        // РїСЂРёРІСЏР·РєР° pipeline Рё СЂРµСЃСѓСЂСЃРѕРІ
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
             state.renderer.pipeline());
 
@@ -160,9 +166,9 @@ namespace application {
         vkCmdBindVertexBuffers(cmd, 0, 1, vertex_buffers, offsets);
         vkCmdBindIndexBuffer(cmd, state.renderer.indexBuffer(), 0, VK_INDEX_TYPE_UINT32);
 
-        // отрисовка
+        // РѕС‚СЂРёСЃРѕРІРєР°
         vkCmdDrawIndexed(cmd, state.renderer.indexCount(), 1, 0, 0, 0);
-        vkCmdEndRenderPass(cmd); //конец render pass
+        vkCmdEndRenderPass(cmd); //РєРѕРЅРµС† render pass
     }
 
 } // namespace application
