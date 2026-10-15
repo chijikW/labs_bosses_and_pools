@@ -1,66 +1,40 @@
+# labs_bosses_and_pools
+
+Ivan's laboratory assignments are here!!!
+
+Этот репозиторий основан на стартовом коде
+[Vulkan Starter App](https://github.com/vladeemerr/vulkan-starter-app).
+Лабораторные работы выполняются на C++20 с использованием Vulkan, GLFW и ImGui.
+
+---
+
 # 🌋 Vulkan Starter App
 
-## Getting started
+## С чего начать
 
-You need C++ compiler, Vulkan SDK and CMake installed before you can build this project.
+Перед сборкой проекта вам нужно установить компилятор C++, Vulkan SDK и CMake.
 
-This project uses C++20 standard and thus requires either of those compilers:
+Проект использует стандарт C++20, поэтому требуется один из следующих компиляторов:
 - GCC 10.X
 - Clang 10
 - Microsoft Visual Studio 2019
 
-This is officially tested on *Windows* and *GNU/Linux platforms*, no *macOS* support yet.
-If you have a working macOS solution of this code, consider submitting a PR so others
-can build this example code without a hassle!
+Официально проект протестирован на *Windows* и *GNU/Linux*, поддержки *macOS* пока нет.
+Если у вас есть рабочее решение для macOS — отправьте PR, чтобы другие тоже
+могли собрать этот пример без лишних сложностей!
 
-<ins>**1. Downloading the repository**</ins>
+<ins>**1. Скачивание репозитория**</ins>
 
-Start by cloning the repository with `git clone --depth 1 https://github.com/vladeemerr/vulkan-starter-app`
+Начните с клонирования репозитория командой
+`git clone --depth 1 https://github.com/vladeemerr/vulkan-starter-app`
 
-This repository does not contain any submodules, it utilizes CMake's `FetchContent` feature instead.
+В этом репозитории нет подмодулей — вместо них используется механизм CMake `FetchContent`.
 
-<ins>**2. Configuring the project**</ins>
+<ins>**2. Настройка проекта**</ins>
 
-Run either one of the CMake lines to download dependencies and configure the project:
-
-```bash
-cmake --preset debug       # for GNU/Linux (GCC/Clang)
-cmake --preset msvc-debug  # for Windows (Visual Studio 2019)
-cmake --preset mingw-debug # for Windows (MinGW)
-```
-
-If you wish to build in `release` mode, change `debug` to `release`.
-
-If changes are made (added/removed files), or if you want to regenerate project files, rerun the command above.
-
-<ins>**3. Building**</ins>
-
-To build the project, use the line below. You are most likely using `debug` preset, so
-the directory that will eventually contain your build files is named `build-debug`.
-
-Likewise for `release` that directory will be named `build-release`
-
-Run one those commands, depending on which preset you chose:
+Выполните одну из команд CMake, чтобы скачать зависимости и настроить проект:
 
 ```bash
-cmake --build build-debug --parallel # for debug
-cmake --build build-release --parallel # for release
-```
-
-### Running
-
-`build-*` directory will contain the executable in one of the subdirectories after successful build.
-
-For `msvc-{debug|release}` builds output subdirectory is set to `Debug` or `Release` respectively.
-For other configurations output subdirectory is set to `vulkan-starter-app`.
-
-**Make sure your working directory is set to the project root!**
-Project root is where this README file resides. Otherwise, the
-code responsible for loading shaders or other resources from files will fail,
-because relative paths are used.
-
-### Compiling shaders
-
-`CMakeLists.txt` has a build recipe for compiling shader files
-along with an application. Look for a comment in this file to see
-how to compile your shaders.
+cmake --preset debug       # для GNU/Linux (GCC/Clang)
+cmake --preset msvc-debug  # для Windows (Visual Studio 2019)
+cmake --preset mingw-debug # для Windows (MinGW)
