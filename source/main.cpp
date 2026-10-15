@@ -25,6 +25,7 @@ GLFWwindow* glfw_window;
 
 int main() {
 	int status = EXIT_SUCCESS;
+	double last_time = 0.0;
 
 	if (!glfwInit()) {
 		std::cerr << "Failed to initialize GLFW\n";
@@ -72,14 +73,17 @@ int main() {
 		goto err_application_init;
 	}
 
+	last_time = glfwGetTime();
 	while (!glfwWindowShouldClose(glfw_window)) {
-		const double time = glfwGetTime();
+		const double now = glfwGetTime();
+		const double delta = now - last_time;
+		last_time = now;
 
 		glfwPollEvents();
 		ImGui_ImplGlfw_NewFrame();
 
 		ImGui::NewFrame();
-		application::update(time);
+		application::update(delta);
 		ImGui::Render();
 
 		graphics::internal::FrameData fd = graphics::internal::prepare();
