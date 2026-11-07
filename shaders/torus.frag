@@ -1,16 +1,13 @@
 #version 450
 
-// Вход: цвет от вершинного шейдера
 layout(location = 0) in vec3 fragColor;
-
-// Выход: цвет пикселя
 layout(location = 0) out vec4 outColor;
 
-// Push constant: множитель цвета из ImGui
-layout(push_constant) uniform PushConstants {
+layout(set = 1, binding = 0) uniform ModelUniforms {
+    mat4 model;
     vec4 tint;
-} pc;
+} obj;
 
 void main() {
-    outColor = vec4(fragColor * pc.tint.rgb, 1.0);
+    outColor = vec4(fragColor * obj.tint.rgb, 1.0);
 }

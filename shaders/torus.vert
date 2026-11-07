@@ -1,20 +1,19 @@
 #version 450
 
-// Вход: атрибуты вершины (позиция + цвет)
 layout(location = 0) in vec3 inPosition;
 layout(location = 1) in vec3 inColor;
 
-// Выход: цвет передаётся во фрагментный шейдер
 layout(location = 0) out vec3 fragColor;
+layout(set = 0, binding = 0) uniform SceneUniforms {
+    mat4 view_projection;
+} scene;
 
-// Uniform buffer с MVP-матрицами
-layout(set = 0, binding = 0) uniform UniformBufferObject {
+layout(set = 1, binding = 0) uniform ModelUniforms {
     mat4 model;
-    mat4 view;
-    mat4 proj;
-} ubo;
+    vec4 tint;
+} obj;
 
 void main() {
-    gl_Position = ubo.proj * ubo.view * ubo.model * vec4(inPosition, 1.0);
+    gl_Position = scene.view_projection * obj.model * vec4(inPosition, 1.0);
     fragColor = inColor;
 }

@@ -4,11 +4,9 @@ include(FetchContent)
 project(vulkan-starter-app LANGUAGES C CXX)
 
 add_executable(${PROJECT_NAME}
-	source/main.cpp
-	source/graphics_internal.cpp
-	source/application.cpp
-	source/torus.cpp
-	source/torus_renderer.cpp
+    source/main.cpp
+    source/graphics_internal.cpp
+    source/application.cpp
 )
 
 if(LINUX)
@@ -114,8 +112,7 @@ if(GLSLC_FOUND)
 		list(APPEND _SHADER_BINARIES ${SHADER_BINARY_PATH})
 	endmacro()
 
-	# To compile shader file, use compile_shader function with a file name
-	# of a shader inside shaders directory. See example below:
+
 
 	compile_shader(torus.vert)
 	compile_shader(torus.frag)
