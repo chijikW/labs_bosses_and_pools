@@ -411,7 +411,7 @@ namespace application {
             VkShaderModule frag = createShaderModule(ctx.device, frag_code);
             if (vert == VK_NULL_HANDLE || frag == VK_NULL_HANDLE) return false;
 
-            // pipeline layout
+            // layout
             const VkDescriptorSetLayout layouts[] = {
                 scene_set_layout,
                 model_set_layout,
@@ -427,7 +427,7 @@ namespace application {
                 return false;
             }
 
-            // pipeline stages
+            //pipeline stages
             const VkPipelineShaderStageCreateInfo stages[] = {
                 {.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
                   .stage = VK_SHADER_STAGE_VERTEX_BIT,
@@ -438,12 +438,12 @@ namespace application {
             };
 
             // vertex input 
-            const VkVertexInputBindingDescription binding = {
+            const VkVertexInputBindingDescription binding = {       //атрибут
                 .binding = 0,
                 .stride = sizeof(Vertex),
                 .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
             };
-            const VkVertexInputAttributeDescription attrs[] = {
+            const VkVertexInputAttributeDescription attrs[] = {     //атрибут (color, position)
                 {.location = 0, .binding = 0,
                   .format = VK_FORMAT_R32G32B32_SFLOAT,
                   .offset = offsetof(Vertex, position) },
@@ -480,7 +480,7 @@ namespace application {
             };
             const VkPipelineDepthStencilStateCreateInfo ds = {
                 .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
-                .depthTestEnable = VK_TRUE,
+                .depthTestEnable = VK_TRUE,             //тест глубины
                 .depthWriteEnable = VK_TRUE,
                 .depthCompareOp = VK_COMPARE_OP_LESS,
             };
@@ -580,8 +580,8 @@ namespace application {
         const float dt = float(time);
         ImGui::SetNextWindowSize(ImVec2(450, 700), ImGuiCond_FirstUseEver);
         ImGui::SetNextWindowPos(ImVec2(20, 20), ImGuiCond_FirstUseEver);
-        ImGui::Begin("Torus controls");
 
+        ImGui::Begin("Torus controls");
         if (ImGui::CollapsingHeader("Projection", ImGuiTreeNodeFlags_DefaultOpen)) {
             ImGui::RadioButton("Perspective", &scene.projection, 0);
             ImGui::SameLine();
@@ -633,7 +633,7 @@ namespace application {
         }
         const float t = float(animation_time);
 
-        const glm::mat4 view = glm::lookAt(
+        const glm::mat4 view = glm::lookAt(         //view mtrx
             glm::vec3(0.0f, 1.0f, 5.0f),
             glm::vec3(0.0f),
             glm::vec3(0.0f, 1.0f, 0.0f));
@@ -651,7 +651,7 @@ namespace application {
             const float h = scene.ortho_half_height;
             proj = glm::ortho(-h * aspect, h * aspect, -h, h, 0.1f, 100.0f);
         }
-        proj[1][1] *= -1.0f;
+        proj[1][1] *= -1.0f;            //proj mtrx
         proj[2][2] = proj[2][2] * 0.5f;
         proj[3][2] = proj[3][2] * 0.5f + 0.5f;
 
@@ -659,14 +659,14 @@ namespace application {
         scene_ubo.view_projection = proj * view;
         std::memcpy(scene_mapped, &scene_ubo, sizeof(scene_ubo));
 
-        glm::vec3 offset(0.0f);
+        glm::vec3 offset(0.0f);         //мат
         if (scene.animate) {
             offset = glm::vec3(
                 scene.radius * std::cos(t),
                 scene.vertical_amplitude * std::sin(float(scene.vertical_frequency) * t),
                 scene.radius * std::sin(t));
         }
-        glm::mat4 model = glm::translate(glm::mat4(1.0f),
+        glm::mat4 model = glm::translate(glm::mat4(1.0f),       //model mtrx TRS
             scene.position + offset);
 
         model = glm::rotate(model, glm::radians(scene.rotation_deg.z),
