@@ -15,10 +15,10 @@
 
 namespace application {
 
-    namespace {     // вершина и процедурная генерация тора
+    namespace {
         struct Vertex {
             glm::vec3 position;
-            glm::vec3 color;
+            glm::vec3 normal;
         };
 
         struct Mesh {
@@ -49,14 +49,14 @@ namespace application {
                         (R + r * cv) * su,
                     };
 
-                    // процедурные цвета по локальной позиции
-                    const glm::vec3 color{
-                        0.5f + 0.5f * std::sin(position.x * 2.0f),
-                        0.5f + 0.5f * std::sin(position.y * 2.0f),
-                        0.5f + 0.5f * std::sin(position.z * 2.0f),
-                    };
+                    // цвет меняем на нормаль
+                    const glm::vec3 normal = glm::normalize(glm::vec3(
+                        cv * cu,
+                        sv,
+                        cv * su
+                    ));
 
-                    mesh.vertices.push_back({ position, color });
+                    mesh.vertices.push_back({ position, normal });
                 }
             }
 
@@ -86,11 +86,20 @@ namespace application {
 
         struct SceneUniforms {
             glm::mat4 view_projection;
+
+            glm::vec4 camera_position;
+
+            glm::vec4 light_direction;
+            glm::vec4 light_color_intensity;
+
+            glm::vec4 ambient_color_intensity;
         };
 
         struct ModelUniforms {
             glm::mat4 model;
-            glm::vec4 tint;
+
+            glm::vec4 albedo;
+            glm::vec4 specular_color_shininess;
         };
 
         struct Object {
@@ -102,29 +111,40 @@ namespace application {
 
 
         struct SceneState {
-            int   projection = 0;          // 0 = perspective | 1 = ortho
-            float fov_deg = 60.0f;
-            float ortho_half_height = 1.5f;
 
-            // легкая трансформация
+            glm::vec3 camera_position = glm::vec3(0.0f, 0.0f, 5.0f);
+            float camera_yaw = -90.0f;
+            float camera_pitch = 0.0f;
+            float fov_deg = 60.0f;
+
+            glm::vec3 light_direction = glm::vec3(-0.5f, -1.0f, -0.5f);
+            glm::vec3 light_color = glm::vec3(1.0f);
+            float light_intensity = 1.0f;
+
+            glm::vec3 ambient_color = glm::vec3(1.0f);
+            float ambient_intensity = 0.15f;
+
+            glm::vec3 albedo = glm::vec3(0.7f, 0.3f, 0.8f);
+            glm::vec3 specular_color = glm::vec3(1.0f);
+            float shininess = 32.0f;
+
             glm::vec3 position = glm::vec3(0.0f);
             glm::vec3 rotation_deg = glm::vec3(0.0f);
             glm::vec3 scale = glm::vec3(1.0f);
 
-            bool  animate = true;
-            bool  playing = true;
+            bool animate = true;
+            bool playing = true;
+
             float speed = 1.0f;
             float radius = 1.5f;
             float vertical_amplitude = 0.5f;
-            int   vertical_frequency = 2;
+            int vertical_frequency = 2;
             float spin_speed = 1.0f;
-
-            glm::vec4 tint = glm::vec4(1.0f);
         };
 
         SceneState scene;
         double animation_time = 0.0;
-        bool   show_demo = false;
+        bool show_demo = false;
 
         VkBuffer       vertex_buffer = VK_NULL_HANDLE;
         VmaAllocation  vertex_allocation = VK_NULL_HANDLE;
@@ -171,9 +191,6 @@ namespace application {
             return m;
         }
 
-        // ================================================================
-        // создание буфера через Vma
-        // ================================================================
 
         bool createBuffer(VkDeviceSize size, VkBufferUsageFlags usage,
             VkBuffer& out_buffer, VmaAllocation& out_allocation,
@@ -244,18 +261,18 @@ namespace application {
         }
 
         // ================================================================
-        // Descriptor set layouts
+        // Descriptors layout
         // ================================================================
 
         bool createDescriptorSetLayouts() {
             auto& ctx = graphics::internal::context;
 
-            // set 0 —- scene
+            //1
             const VkDescriptorSetLayoutBinding scene_binding = {
                 .binding = 0,
                 .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
                 .descriptorCount = 1,
-                .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+                .stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
             };
             const VkDescriptorSetLayoutCreateInfo scene_info = {
                 .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
@@ -268,7 +285,7 @@ namespace application {
                 return false;
             }
 
-            // set 1 —- model
+            //2
             const VkDescriptorSetLayoutBinding model_binding = {
                 .binding = 0,
                 .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
@@ -427,7 +444,6 @@ namespace application {
                 return false;
             }
 
-            //pipeline stages
             const VkPipelineShaderStageCreateInfo stages[] = {
                 {.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
                   .stage = VK_SHADER_STAGE_VERTEX_BIT,
@@ -437,19 +453,18 @@ namespace application {
                   .module = frag, .pName = "main" },
             };
 
-            // vertex input 
-            const VkVertexInputBindingDescription binding = {       //атрибут
+            const VkVertexInputBindingDescription binding = {
                 .binding = 0,
                 .stride = sizeof(Vertex),
                 .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
             };
-            const VkVertexInputAttributeDescription attrs[] = {     //атрибут (color, position)
+            const VkVertexInputAttributeDescription attrs[] = {
                 {.location = 0, .binding = 0,
                   .format = VK_FORMAT_R32G32B32_SFLOAT,
                   .offset = offsetof(Vertex, position) },
                 {.location = 1, .binding = 0,
                   .format = VK_FORMAT_R32G32B32_SFLOAT,
-                  .offset = offsetof(Vertex, color) },
+                  .offset = offsetof(Vertex, normal) },
             };
             const VkPipelineVertexInputStateCreateInfo vi = {
                 .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
@@ -540,9 +555,9 @@ namespace application {
         if (!createUniformBuffers(1))                return false;
         if (!createDescriptorPoolAndSets())          return false;
         if (!createPipeline())                       return false;
-              
+
         ImGuiIO& io = ImGui::GetIO();
-        io.FontGlobalScale = 1.5f; 
+        io.FontGlobalScale = 1.5f;
 
         std::cout << "Application initialized\n";
         return true;
@@ -577,117 +592,326 @@ namespace application {
     // ================================================================
 
     void update(double time) {
-        const float dt = float(time);
-        ImGui::SetNextWindowSize(ImVec2(450, 700), ImGuiCond_FirstUseEver);
+
+        ImGui::SetNextWindowSize(ImVec2(450, 750), ImGuiCond_FirstUseEver);
         ImGui::SetNextWindowPos(ImVec2(20, 20), ImGuiCond_FirstUseEver);
 
-        ImGui::Begin("Torus controls");
-        if (ImGui::CollapsingHeader("Projection", ImGuiTreeNodeFlags_DefaultOpen)) {
-            ImGui::RadioButton("Perspective", &scene.projection, 0);
-            ImGui::SameLine();
-            ImGui::RadioButton("Orthographic", &scene.projection, 1);
-            if (scene.projection == 0) {
-                ImGui::SliderFloat("FOV (deg)", &scene.fov_deg, 20.0f, 120.0f);
-            }
-            else {
-                ImGui::SliderFloat("Ortho half-height",
-                    &scene.ortho_half_height, 0.5f, 5.0f);
-            }
+        ImGui::Begin("Lighting controls");
+
+        if (ImGui::CollapsingHeader("Camera", ImGuiTreeNodeFlags_DefaultOpen)) {
+
+            ImGui::DragFloat3(
+                "Camera position",
+                &scene.camera_position.x,
+                0.05f
+            );
+
+            ImGui::SliderFloat(
+                "Yaw",
+                &scene.camera_yaw,
+                -180.0f,
+                180.0f
+            );
+
+            ImGui::SliderFloat(
+                "Pitch",
+                &scene.camera_pitch,
+                -89.0f,
+                89.0f
+            );
+
+            ImGui::SliderFloat(
+                "FOV",
+                &scene.fov_deg,
+                20.0f,
+                120.0f
+            );
         }
 
-        if (ImGui::CollapsingHeader("Transform", ImGuiTreeNodeFlags_DefaultOpen)) {
-            ImGui::DragFloat3("Position", &scene.position.x, 0.01f);
-            ImGui::SliderFloat3("Rotation (deg)", &scene.rotation_deg.x, -180.0f, 180.0f);
-            ImGui::DragFloat3("Scale", &scene.scale.x, 0.01f, 0.05f, 5.0f);
+        if (ImGui::CollapsingHeader("Directional light", ImGuiTreeNodeFlags_DefaultOpen)) {
+
+            ImGui::DragFloat3(
+                "Direction",
+                &scene.light_direction.x,
+                0.01f
+            );
+
+            ImGui::ColorEdit3(
+                "Light color",
+                &scene.light_color.x
+            );
+
+            ImGui::SliderFloat(
+                "Light intensity",
+                &scene.light_intensity,
+                0.0f,
+                5.0f
+            );
+        }
+
+        if (ImGui::CollapsingHeader("Ambient light", ImGuiTreeNodeFlags_DefaultOpen)) {
+
+            ImGui::ColorEdit3(
+                "Ambient color",
+                &scene.ambient_color.x
+            );
+
+            ImGui::SliderFloat(
+                "Ambient intensity",
+                &scene.ambient_intensity,
+                0.0f,
+                2.0f
+            );
+        }
+
+        if (ImGui::CollapsingHeader("Material", ImGuiTreeNodeFlags_DefaultOpen)) {
+
+            ImGui::ColorEdit3(
+                "Albedo",
+                &scene.albedo.x
+            );
+
+            ImGui::ColorEdit3(
+                "Specular color",
+                &scene.specular_color.x
+            );
+
+            ImGui::SliderFloat(
+                "Shininess",
+                &scene.shininess,
+                1.0f,
+                256.0f
+            );
+        }
+
+        if (ImGui::CollapsingHeader("Model transform")) {
+
+            ImGui::DragFloat3(
+                "Model position",
+                &scene.position.x,
+                0.01f
+            );
+
+            ImGui::SliderFloat3(
+                "Rotation",
+                &scene.rotation_deg.x,
+                -180.0f,
+                180.0f
+            );
+
+            ImGui::DragFloat3(
+                "Scale",
+                &scene.scale.x,
+                0.01f,
+                0.05f,
+                5.0f
+            );
         }
 
         if (ImGui::CollapsingHeader("Animation", ImGuiTreeNodeFlags_DefaultOpen)) {
+
             ImGui::Checkbox("Enable trajectory", &scene.animate);
+
             if (ImGui::Button(scene.playing ? "Pause" : "Play")) {
                 scene.playing = !scene.playing;
             }
+
             ImGui::SameLine();
-            if (ImGui::Button("Reset time")) animation_time = 0.0;
+
+            if (ImGui::Button("Reset time")) {
+                animation_time = 0.0;
+            }
+
             ImGui::SliderFloat("Speed", &scene.speed, 0.0f, 5.0f);
             ImGui::SliderFloat("Radius", &scene.radius, 0.0f, 3.0f);
-            ImGui::SliderFloat("Vertical amplitude", &scene.vertical_amplitude, 0.0f, 2.0f);
-            ImGui::SliderInt("Vertical frequency", &scene.vertical_frequency, 1, 6);
-            ImGui::SliderFloat("Spin speed", &scene.spin_speed, 0.0f, 5.0f);
-        }
 
-        if (ImGui::CollapsingHeader("Color", ImGuiTreeNodeFlags_DefaultOpen)) {
-            ImGui::ColorEdit3("Tint", &scene.tint.x);
+            ImGui::SliderFloat(
+                "Vertical amplitude",
+                &scene.vertical_amplitude,
+                0.0f,
+                2.0f
+            );
+
+            ImGui::SliderInt(
+                "Vertical frequency",
+                &scene.vertical_frequency,
+                1,
+                6
+            );
+
+            ImGui::SliderFloat("Spin speed", &scene.spin_speed, 0.0f, 5.0f);
         }
 
         if (ImGui::Button("Reset all")) {
             scene = SceneState();
             animation_time = 0.0;
         }
+
         ImGui::Checkbox("Show ImGui demo", &show_demo);
+
         ImGui::End();
 
-        if (show_demo) ImGui::ShowDemoWindow(&show_demo);
+        if (show_demo) {
+            ImGui::ShowDemoWindow(&show_demo);
+        }
 
         if (scene.animate && scene.playing) {
-            animation_time += double(dt) * double(scene.speed);
+            animation_time += time * double(scene.speed);
         }
+
         const float t = float(animation_time);
 
-        const glm::mat4 view = glm::lookAt(         //view mtrx
-            glm::vec3(0.0f, 1.0f, 5.0f),
-            glm::vec3(0.0f),
-            glm::vec3(0.0f, 1.0f, 0.0f));
+        // =====================================
+        // camera матрицы
+        // =====================================
+
+        scene.camera_pitch = glm::clamp(
+            scene.camera_pitch,
+            -89.0f,
+            89.0f
+        );
+
+        const float yaw = glm::radians(scene.camera_yaw);
+        const float pitch = glm::radians(scene.camera_pitch);
+
+        glm::vec3 camera_forward(
+            std::cos(yaw) * std::cos(pitch),
+            std::sin(pitch),
+            std::sin(yaw) * std::cos(pitch)
+        );
+
+        camera_forward = glm::normalize(camera_forward);
+
+        const glm::mat4 view = glm::lookAt(
+            scene.camera_position,
+            scene.camera_position + camera_forward,
+            glm::vec3(0.0f, 1.0f, 0.0f)
+        );
 
         const auto extent = graphics::internal::context.swapchain_extent;
+
         const float aspect = float(extent.width) /
             float(std::max(extent.height, 1u));
 
-        glm::mat4 proj;
-        if (scene.projection == 0) {
-            proj = glm::perspective(glm::radians(scene.fov_deg),
-                aspect, 0.1f, 100.0f);
-        }
-        else {
-            const float h = scene.ortho_half_height;
-            proj = glm::ortho(-h * aspect, h * aspect, -h, h, 0.1f, 100.0f);
-        }
-        proj[1][1] *= -1.0f;            //proj mtrx
+        glm::mat4 proj = glm::perspective(
+            glm::radians(scene.fov_deg),
+            aspect,
+            0.1f,
+            100.0f
+        );
+
+        proj[1][1] *= -1.0f;
         proj[2][2] = proj[2][2] * 0.5f;
         proj[3][2] = proj[3][2] * 0.5f + 0.5f;
 
-        SceneUniforms scene_ubo{};
-        scene_ubo.view_projection = proj * view;
-        std::memcpy(scene_mapped, &scene_ubo, sizeof(scene_ubo));
+        // =====================================
+        // SCENE UNIFORM BUFFER
+        // =====================================
 
-        glm::vec3 offset(0.0f);         //мат
+        SceneUniforms scene_ubo{};
+
+        scene_ubo.view_projection = proj * view;
+
+        scene_ubo.camera_position = glm::vec4(
+            scene.camera_position,
+            1.0f
+        );
+
+        scene_ubo.light_direction = glm::vec4(
+            glm::normalize(scene.light_direction),
+            0.0f
+        );
+
+        scene_ubo.light_color_intensity = glm::vec4(
+            scene.light_color,
+            scene.light_intensity
+        );
+
+        scene_ubo.ambient_color_intensity = glm::vec4(
+            scene.ambient_color,
+            scene.ambient_intensity
+        );
+
+        std::memcpy(
+            scene_mapped,
+            &scene_ubo,
+            sizeof(scene_ubo)
+        );
+
+        // =====================================
+        // MODEL MATRIX
+        // =====================================
+
+        // смещение модели 
+        glm::vec3 offset(0.0f);
+
         if (scene.animate) {
             offset = glm::vec3(
                 scene.radius * std::cos(t),
-                scene.vertical_amplitude * std::sin(float(scene.vertical_frequency) * t),
-                scene.radius * std::sin(t));
+                scene.vertical_amplitude *
+                std::sin(float(scene.vertical_frequency) * t),
+                scene.radius * std::sin(t)
+            );
         }
-        glm::mat4 model = glm::translate(glm::mat4(1.0f),       //model mtrx TRS
-            scene.position + offset);
 
-        model = glm::rotate(model, glm::radians(scene.rotation_deg.z),
-            glm::vec3(0, 0, 1));
-        model = glm::rotate(model, glm::radians(scene.rotation_deg.y),
-            glm::vec3(0, 1, 0));
-        model = glm::rotate(model, glm::radians(scene.rotation_deg.x),
-            glm::vec3(1, 0, 0));
+        // матрица перемещения
+        glm::mat4 model = glm::translate(
+            glm::mat4(1.0f),
+            scene.position + offset
+        );
+
+        model = glm::rotate(
+            model,
+            glm::radians(scene.rotation_deg.z),
+            glm::vec3(0, 0, 1)
+        );
+
+        model = glm::rotate(
+            model,
+            glm::radians(scene.rotation_deg.y),
+            glm::vec3(0, 1, 0)
+        );
+
+        model = glm::rotate(
+            model,
+            glm::radians(scene.rotation_deg.x),
+            glm::vec3(1, 0, 0)
+        );
 
         if (scene.animate) {
-            model = glm::rotate(model, scene.spin_speed * t,
-                glm::vec3(0.5f, 1, 0));
+            model = glm::rotate(
+                model,
+                scene.spin_speed * t,
+                glm::vec3(0.5f, 1.0f, 0.0f)
+            );
         }
 
         model = glm::scale(model, scene.scale);
 
-        // запись в uniform buffer
+
+        // =====================================
+        // MODEL UNIFORM BUFFER
+        // =====================================
+
         ModelUniforms obj{};
+
         obj.model = model;
-        obj.tint = scene.tint;
-        std::memcpy(objects[0].uniform_mapped, &obj, sizeof(obj));
+
+        obj.albedo = glm::vec4(
+            scene.albedo,
+            1.0f
+        );
+
+        obj.specular_color_shininess = glm::vec4(
+            scene.specular_color,
+            scene.shininess
+        );
+
+        std::memcpy(
+            objects[0].uniform_mapped,
+            &obj,
+            sizeof(obj)
+        );
     }
 
     // ================================================================
