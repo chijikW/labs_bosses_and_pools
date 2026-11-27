@@ -785,7 +785,7 @@ namespace application {
         const float t = float(animation_time);
 
         // =====================================
-        // camera матрицы
+        // расчет камеры
         // =====================================
 
         scene.camera_pitch = glm::clamp(
