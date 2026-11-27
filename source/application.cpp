@@ -116,6 +116,8 @@ namespace application {
             float camera_yaw = -90.0f;
             float camera_pitch = 0.0f;
             float fov_deg = 60.0f;
+            int projection = 0;
+            float ortho_half_height = 1.5f;
 
             glm::vec3 light_direction = glm::vec3(-0.5f, -1.0f, -0.5f);
             glm::vec3 light_color = glm::vec3(1.0f);
@@ -305,7 +307,7 @@ namespace application {
             return true;
         }
 
-        // ================================================================
+        // ================================================================а
         // Uniform buffers
         // ================================================================
 
@@ -486,7 +488,7 @@ namespace application {
                 .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
                 .polygonMode = VK_POLYGON_MODE_FILL,
                 .cullMode = VK_CULL_MODE_BACK_BIT,
-                .frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE,
+                .frontFace = VK_FRONT_FACE_CLOCKWISE,
                 .lineWidth = 1.0f,
             };
             const VkPipelineMultisampleStateCreateInfo ms = {
@@ -588,7 +590,7 @@ namespace application {
     }
 
     // ================================================================
-    // ImGui + матрицы + запись в uniform buffers
+    // ImGui
     // ================================================================
 
     void update(double time) {
@@ -626,6 +628,27 @@ namespace application {
                 20.0f,
                 120.0f
             );
+
+            const char* projection_types[] = {
+                "Perspective",
+                "Orthographic"
+            };
+
+            ImGui::Combo(
+                "Projection",
+                &scene.projection,
+                projection_types,
+                IM_ARRAYSIZE(projection_types)
+            );
+
+            if (scene.projection == 1) {
+                ImGui::SliderFloat(
+                    "Orthographic size",
+                    &scene.ortho_half_height,
+                    0.1f,
+                    10.0f
+                );
+            }
         }
 
         if (ImGui::CollapsingHeader("Directional light", ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -793,16 +816,35 @@ namespace application {
         const float aspect = float(extent.width) /
             float(std::max(extent.height, 1u));
 
-        glm::mat4 proj = glm::perspective(
-            glm::radians(scene.fov_deg),
-            aspect,
-            0.1f,
-            100.0f
-        );
+        glm::mat4 proj;
+
+        if (scene.projection == 0) {            // перспективная проекция
+            proj = glm::perspective(
+                glm::radians(scene.fov_deg),
+                aspect,
+                0.1f,
+                100.0f
+            );
+
+        }
+        else {              // ортогональная проекция
+            float halfHeight = scene.ortho_half_height;
+            float halfWidth = halfHeight * aspect;
+
+            proj = glm::ortho(
+                -halfWidth,
+                halfWidth,
+                -halfHeight,
+                halfHeight,
+                0.1f,
+                100.0f
+            );
+
+        }
 
         proj[1][1] *= -1.0f;
-        proj[2][2] = proj[2][2] * 0.5f;
-        proj[3][2] = proj[3][2] * 0.5f + 0.5f;
+        proj[2][2] = 0.5f * (proj[2][2] + proj[2][3]);
+        proj[3][2] = 0.5f * (proj[3][2] + proj[3][3]);
 
         // =====================================
         // SCENE UNIFORM BUFFER
