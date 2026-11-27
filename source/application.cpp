@@ -827,7 +827,7 @@ namespace application {
             );
 
         }
-        else {              // ортогональная проекция
+        else {              // ортографическая проекция
             float halfHeight = scene.ortho_half_height;
             float halfWidth = halfHeight * aspect;
 
